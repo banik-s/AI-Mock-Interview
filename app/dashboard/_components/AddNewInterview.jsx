@@ -1,0 +1,161 @@
+"use client";
+
+import React, { useState } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { LoaderCircle } from "lucide-react";
+import axios from "axios";
+import { useUser } from "@clerk/nextjs";
+import moment from "moment";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+function AddNewInterview() {
+  const [openDialog, setOpenDialog] = useState(false);
+  const [jobPosition, setJobPosition] = useState("");
+  const [jobDesc, setJobDesc] = useState("");
+  const [jobExperience, setJobExperience] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [jsonResponse, setJsonResponse] = useState([]);
+
+  const { user } = useUser();
+
+
+  // Initialize GoogleGenerativeAI with your API key
+  const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY);
+
+  // Get the generative model
+  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+  const onSubmit = async (event) => {
+    event.preventDefault();
+    setLoading(true);
+
+    try {
+      const inputPrompt = `job position: ${jobPosition}, job description: ${jobDesc}, years of experience: ${jobExperience}, please provide 5 interview questions with answers in JSON format`;
+
+      // Use the Gemini API to generate content
+      const response = await model.generateContent(inputPrompt);
+      const mockJsonResp = response.response.text().replace('```json', '').replace('```', '');
+
+      console.log(mockJsonResp);
+      setJsonResponse(mockJsonResp);
+
+      if (mockJsonResp) {
+        const resp = await db
+          .insert(MockInterview)
+          .values({
+            mockId: uuidv4(),
+            jsonMockResp: mockJsonResp,
+            jobPosition,
+            jobDesc,
+            jobExperience,
+            createdBy: user?.primaryEmailAddress?.emailAddress,
+            createdAt: moment().format("DD-MM-yyyy"),
+          })
+          .returning({ mockId: MockInterview.mockId });
+
+        console.log("Inserted ID:", resp);
+        if (resp) {
+          setOpenDialog(false);
+        }
+      } else {
+        console.error("ERROR: No response from language model API");
+      }
+    } catch (error) {
+      console.error("Error fetching interview questions:", error);
+    } finally {
+      setLoading(false); // Stop loading
+    }
+  };
+
+
+
+  return (
+    <div>
+      <div
+        className="p-10 border rounded-lg bg-secondary hover:scale-105 hover:shadow-md cursor-pointer transition-all"
+        onClick={() => setOpenDialog(true)}
+      >
+        <h2 className="text-lg text-center">+Add New</h2>
+      </div>
+      <Dialog open={openDialog} onClose={() => setOpenDialog(false)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-2xl">
+              Tell us more about the interview you want to add
+            </DialogTitle>
+            <DialogDescription>
+              <div>
+                <span className="text-lg font-semibold">
+                  Add details about your job role/position, job description,
+                  and years of experience
+                </span>
+                <form onSubmit={onSubmit}>
+                  <div className="mt-7 my-3">
+                    <label>Job Role/ Job Position</label>
+                    <Input
+                      placeholder="Ex. FullStack Developer"
+                      required
+                      onChange={(event) =>
+                        setJobPosition(event.target.value)
+                      }
+                    />
+                  </div>
+                  <div className="my-3">
+                    <label>Job Description/ Tech Stack (Inshort)</label>
+                    <Textarea
+                      placeholder="Ex. React, Angular, NodeJs, MySql etc"
+                      required
+                      onChange={(event) => setJobDesc(event.target.value)}
+                    />
+                  </div>
+                  <div className="my-3">
+                    <label>Years of Experience</label>
+                    <Input
+                      placeholder="Ex. 5"
+                      type="number"
+                      max="50"
+                      required
+                      onChange={(event) =>
+                        setJobExperience(event.target.value)
+                      }
+                    />
+                  </div>
+                  <div className="flex gap-5 justify-end">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => setOpenDialog(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button type="submit" disabled={loading}>
+                      {loading ? (
+                        <>
+                          <LoaderCircle className="animate-spin" />
+                          Generating from AI
+                        </>
+                      ) : (
+                        "Start Interview"
+                      )}
+                    </Button>
+                  </div>
+                </form>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+export default AddNewInterview;
